@@ -25,13 +25,13 @@ if db_path.exists():
     with open(outpath_history_places, 'w') as f:
         f.write("url,title,host,visit_count,visit_date\n")
         for row in c.fetchall():
-            url = row[0]
-            
-            # TODO: Probably don't want to truncate the URL at only 80 chars in final version.
-            if len(url) > 80:
-                url = url[:77] + '...'
+            url = row[0]            
+            if len(url) > 128:
+                url = url[:125] + '...'
                 
-            title = row[1]
+            title = str(row[1])
+            if len(title) > 128:
+                title = title[:125] + '...'
             
             # Use slicing to reverse string [begin:end:step].
             host = row[2][::-1]
