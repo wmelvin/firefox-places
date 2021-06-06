@@ -17,14 +17,16 @@ if db_path.exists():
     
     #sql = "SELECT a.title, b.url FROM moz_bookmarks a JOIN moz_places b ON b.id = a.fk"
     
-    sql = "SELECT p.title, a.title, b.url FROM (moz_bookmarks a JOIN moz_places b ON b.id = a.fk) JOIN moz_bookmarks p ON p.id = a.parent"
+    #sql = "SELECT p.title, a.title, b.url FROM (moz_bookmarks a JOIN moz_places b ON b.id = a.fk) JOIN moz_bookmarks p ON p.id = a.parent"
+    
+    sql = "SELECT p.url, p.title, h.visit_date FROM moz_historyvisits h JOIN moz_places p ON p.id = h.place_id"
     
     c.execute(sql)
     
     #for a in c.fetchall():
     #    print(a)  
     
-    with open('test.csv', 'w', newline='') as f:
+    with open('test2.csv', 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerows(c.fetchall())
     
