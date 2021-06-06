@@ -7,6 +7,7 @@ from datetime import datetime
 db_filename = "./data/places.sqlite"
 
 outpath_history_places = Path.cwd() / 'output' / 'history_places.csv'
+outpath_bookmarks = Path.cwd() / 'output' / 'bookmarks.csv'
 
 db_path = Path(db_filename)
 if db_path.exists():
@@ -31,11 +32,25 @@ if db_path.exists():
             # the Unix epoch. Convert to seconds.
             dts = row[1] / 1000000
             
-            f.write('"{0}","{1}"{2}"'.format(
+            f.write('"{0}","{1}"{2}'.format(
                 url,
                 datetime.fromtimestamp(dts),
                 "\n"
             ))
+            
+    sql = "SELECT p.title, a.title, b.url FROM (moz_bookmarks a JOIN moz_places b ON b.id = a.fk) JOIN moz_bookmarks p ON p.id = a.parent"
+    
+    c.execute(sql)
+    
+    with open(outpath_bookmarks, 'w') as f:
+        f.write("parent_title,bookmark_title,url\n")
+        for row in c.fetchall():
+            f.write('"{0}","{1}","{2}"{3}'.format(
+                row[0],
+                row[1],
+                row[2],
+                "\n"
+            ))    
     
     connection.close()
 else:
