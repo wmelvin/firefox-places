@@ -15,12 +15,15 @@ if db_path.exists():
     connection = sqlite3.connect(db_path)
     c = connection.cursor()
         
-    sql = "SELECT p.url, h.visit_date FROM moz_historyvisits h JOIN moz_places p ON p.id = h.place_id ORDER BY h.visit_date"
+    sql = "SELECT p.url, p.title, p.rev_host, p.visit_count, h.visit_date " 
+    sql += "FROM moz_historyvisits h "
+    sql += "JOIN moz_places p ON p.id = h.place_id " 
+    sql += "ORDER BY h.visit_date"
     
     c.execute(sql)
     
     with open(outpath_history_places, 'w') as f:
-        f.write("url,visit_date\n")
+        f.write("url,title,host,visit_count,visit_date\n")
         for row in c.fetchall():
             url = row[0]
             
@@ -28,12 +31,22 @@ if db_path.exists():
             if len(url) > 80:
                 url = url[:77] + '...'
                 
+            title = row[1]
+            
+            # Use slicing to reverse string [begin:end:step].
+            host = row[2][::-1]
+            
+            count = row[3]
+                
             # The date values in the table are in microseconds since 
             # the Unix epoch. Convert to seconds.
-            dts = row[1] / 1000000
+            dts = row[4] / 1000000
             
-            f.write('"{0}","{1}"{2}'.format(
+            f.write('"{0}","{1}","{2}","{3}","{4}"{5}'.format(
                 url,
+                title,
+                host,
+                count,
                 datetime.fromtimestamp(dts),
                 "\n"
             ))
