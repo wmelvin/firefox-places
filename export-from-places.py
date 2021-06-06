@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import sqlite3
+import csv 
 from pathlib import Path
 
 db_filename = "./data/places.sqlite"
@@ -19,9 +20,13 @@ if db_path.exists():
     sql = "SELECT p.title, a.title, b.url FROM (moz_bookmarks a JOIN moz_places b ON b.id = a.fk) JOIN moz_bookmarks p ON p.id = a.parent"
     
     c.execute(sql)
-    for a in c.fetchall():
-        print(a)  
     
+    #for a in c.fetchall():
+    #    print(a)  
+    
+    with open('test.csv', 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerows(c.fetchall())
     
     connection.close()
 else:
