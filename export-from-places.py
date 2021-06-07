@@ -8,6 +8,7 @@ db_filename = "./data/places.sqlite"
 
 outpath_history_places = Path.cwd() / 'output' / 'history_places.csv'
 outpath_bookmarks = Path.cwd() / 'output' / 'bookmarks.csv'
+outpath_frecency = Path.cwd() / 'output' / 'frecency.csv'
 
 db_path = Path(db_filename)
 if db_path.exists():
@@ -15,21 +16,21 @@ if db_path.exists():
     connection = sqlite3.connect(db_path)
     c = connection.cursor()
         
-    sql = "SELECT p.url, p.title, p.rev_host, p.visit_count, h.visit_date " 
+    sql = "SELECT p.url, p.title, p.rev_host, p.visit_count, p.frecency, h.visit_date " 
     sql += "FROM moz_historyvisits h "
     sql += "JOIN moz_places p ON p.id = h.place_id " 
-    sql += "ORDER BY h.visit_date"
+    sql += "ORDER BY h.visit_date DESC"
     
     c.execute(sql)
     
     with open(outpath_history_places, 'w') as f:
-        f.write("url,title,host,visit_count,visit_date\n")
+        f.write("url,title,host,visit_count,frecency,visit_date\n")
         for row in c.fetchall():
             url = row[0]            
             if len(url) > 128:
                 url = url[:125] + '...'
                 
-            title = str(row[1])
+            title = str(row[1]).replace('"',"'")
             if len(title) > 128:
                 title = title[:125] + '...'
             
@@ -37,16 +38,19 @@ if db_path.exists():
             host = row[2][::-1]
             
             count = row[3]
+            
+            frecency = row[4]
                 
             # The date values in the table are in microseconds since 
             # the Unix epoch. Convert to seconds.
-            dts = row[4] / 1000000
+            dts = row[5] / 1000000
             
-            f.write('"{0}","{1}","{2}","{3}","{4}"{5}'.format(
+            f.write('"{0}","{1}","{2}","{3}","{4}","{5}"{6}'.format(
                 url,
                 title,
                 host,
                 count,
+                frecency,
                 datetime.fromtimestamp(dts),
                 "\n"
             ))
@@ -64,7 +68,22 @@ if db_path.exists():
                 row[2],
                 "\n"
             ))    
+            
+
+    sql = "SELECT DISTINCT url, title, frecency FROM moz_places ORDER BY frecency DESC;"
     
+    c.execute(sql)
+    
+    with open(outpath_frecency, 'w') as f:
+        f.write("url,title,frecency\n")
+        for row in c.fetchall():
+            f.write('"{0}","{1}","{2}"{3}'.format(
+                row[0],
+                row[1],
+                row[2],
+                "\n"
+            ))    
+
     connection.close()
 else:
     print(f"ERROR: Cannot find {db_path}")
