@@ -4,6 +4,15 @@ import sqlite3
 from pathlib import Path
 from datetime import datetime
 
+
+def limited(value):
+    s = str(value)
+    if len(s) <= 180:
+        return s
+    else:
+        return s[:177] + '...'
+            
+
 db_filename = "./data/places.sqlite"
 
 outpath_history_places = Path.cwd() / 'output' / 'history_places.csv'
@@ -26,13 +35,9 @@ if db_path.exists():
     with open(outpath_history_places, 'w') as f:
         f.write("url,title,host,visit_count,frecency,visit_date\n")
         for row in c.fetchall():
-            url = row[0]            
-            if len(url) > 128:
-                url = url[:125] + '...'
+            url = limited(row[0])            
                 
-            title = str(row[1]).replace('"',"'")
-            if len(title) > 128:
-                title = title[:125] + '...'
+            title = limited(str(row[1]).replace('"',"'"))
             
             # Use slicing to reverse string [begin:end:step].
             host = row[2][::-1]
@@ -78,8 +83,8 @@ if db_path.exists():
         f.write("url,title,frecency\n")
         for row in c.fetchall():
             f.write('"{0}","{1}","{2}"{3}'.format(
-                row[0],
-                row[1],
+                limited(row[0]),
+                limited(row[1]),
                 row[2],
                 "\n"
             ))    
