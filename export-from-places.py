@@ -3,6 +3,7 @@
 import sqlite3
 from pathlib import Path
 from datetime import datetime
+from textwrap import dedent
 
 
 def limited(value):
@@ -30,11 +31,23 @@ if db_path.exists():
     connection = sqlite3.connect(db_path)
     c = connection.cursor()
 
-    sql = "SELECT p.url, p.title, p.rev_host, p.visit_count, "
-    sql += "p.frecency, h.visit_date "
-    sql += "FROM moz_historyvisits h "
-    sql += "JOIN moz_places p ON p.id = h.place_id "
-    sql += "ORDER BY h.visit_date DESC"
+    sql = dedent(
+        """
+        SELECT
+            p.url,
+            p.title,
+            p.rev_host,
+            p.visit_count,
+            p.frecency,
+            h.visit_date
+        FROM
+            moz_historyvisits h
+        JOIN
+            moz_places p ON p.id = h.place_id
+        ORDER BY
+            h.visit_date DESC
+        """
+    )
 
     c.execute(sql)
 
@@ -69,10 +82,16 @@ if db_path.exists():
                 )
             )
 
-    sql = "SELECT p.title, a.title, b.url "
-    sql += "FROM (moz_bookmarks a JOIN moz_places b "
-    sql += "ON b.id = a.fk) "
-    sql += "JOIN moz_bookmarks p ON p.id = a.parent"
+    sql = dedent(
+        """
+        SELECT
+            p.title,
+            a.title,
+            b.url
+        FROM (moz_bookmarks a JOIN moz_places b ON b.id = a.fk)
+        JOIN moz_bookmarks p ON p.id = a.parent
+        """
+    )
 
     c.execute(sql)
 
@@ -84,8 +103,18 @@ if db_path.exists():
                 '"{0}","{1}","{2}"{3}'.format(row[0], row[1], row[2], "\n")
             )
 
-    sql = "SELECT DISTINCT url, title, frecency "
-    sql += "FROM moz_places ORDER BY frecency DESC;"
+    sql = dedent(
+        """
+        SELECT DISTINCT
+            url,
+            title,
+            frecency
+        FROM
+            moz_places
+        ORDER BY
+            frecency DESC;"
+        """
+    )
 
     c.execute(sql)
 
