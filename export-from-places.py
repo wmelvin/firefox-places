@@ -4,6 +4,14 @@ import sqlite3
 from pathlib import Path
 from datetime import datetime
 from textwrap import dedent
+from textwrap import indent
+
+
+# db_filename = "./data/PC_1/places.sqlite"
+# output_prefix = "pc1"
+
+db_filename = "./data/PC_2/places.sqlite"
+output_prefix = "pc2"
 
 
 def limited(value):
@@ -14,22 +22,53 @@ def limited(value):
         return s[:177] + "..."
 
 
-# db_filename = "./data/PC_1/places.sqlite"
-# output_prefix = "pc1"
+def html_head(title):
+    return dedent(
+        """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <title>{0}</title>
+            <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+            <link rel="stylesheet" href="style.css" />
+        </head>
+        <body>
+            <h1>{0}</h1>
+            <ul>
+        """
+    ).format(title)
 
-db_filename = "./data/PC_2/places.sqlite"
-output_prefix = "pc2"
+
+# print(html_head('foo'))
+
+
+def html_tail():
+    return dedent(
+        """
+        </ul>
+        </body>
+        </html>
+        """
+    )
+
+
+# print(html_tail())
+
 
 outpath = Path.cwd() / "output"
 outpath_history_places = outpath / f"{output_prefix}-history-places.csv"
 outpath_bookmarks = outpath / f"{output_prefix}-bookmarks.csv"
 outpath_frecency = outpath / f"{output_prefix}-frecency.csv"
 
+outpath_custom = outpath / f"{output_prefix}-github-links.html"
+
 db_path = Path(db_filename)
 if db_path.exists():
     print(f"Reading {db_path}")
-    connection = sqlite3.connect(db_path)
-    c = connection.cursor()
+    con = sqlite3.connect(db_path)
+    cur = con.cursor()
+
+    # --- History-Places:
 
     sql = dedent(
         """
@@ -49,12 +88,14 @@ if db_path.exists():
         """
     )
 
-    c.execute(sql)
+    cur.execute(sql)
+
+    rows = cur.fetchall()
 
     print(f"Writing '{outpath_history_places}'")
     with open(outpath_history_places, "w") as f:
         f.write("url,title,host,visit_count,frecency,visit_date\n")
-        for row in c.fetchall():
+        for row in rows:
             url = limited(row[0])
 
             title = limited(str(row[1]).replace('"', "'"))
@@ -82,6 +123,8 @@ if db_path.exists():
                 )
             )
 
+    # --- Bookmarks:
+
     sql = dedent(
         """
         SELECT
@@ -93,42 +136,86 @@ if db_path.exists():
         """
     )
 
-    c.execute(sql)
+    cur.execute(sql)
+
+    rows = cur.fetchall()
 
     print(f"Writing '{outpath_bookmarks}'")
     with open(outpath_bookmarks, "w") as f:
         f.write("parent_title,bookmark_title,url\n")
-        for row in c.fetchall():
+        for row in rows:
             f.write(
                 '"{0}","{1}","{2}"{3}'.format(row[0], row[1], row[2], "\n")
             )
 
+    # --- Frecency:
+
     sql = dedent(
         """
         SELECT DISTINCT
-            url,
-            title,
-            frecency
-        FROM
-            moz_places
-        ORDER BY
-            frecency DESC;"
+            url, title, frecency
+        FROM moz_places
+        ORDER BY frecency DESC
         """
     )
 
-    c.execute(sql)
+    cur.execute(sql)
+
+    rows = cur.fetchall()
 
     print(f"Writing '{outpath_frecency}'")
     with open(outpath_frecency, "w") as f:
         f.write("url,title,frecency\n")
-        for row in c.fetchall():
+        for row in rows:
             f.write(
                 '"{0}","{1}","{2}"{3}'.format(
                     limited(row[0]), limited(row[1]), row[2], "\n"
                 )
             )
 
-    connection.close()
+    # --- 2021-10-01 Custom: GitHub?
+
+    sql = dedent(
+        """
+        select
+            p.title as parent_title,
+            a.title,
+            b.url
+        from
+            moz_bookmarks a
+        join moz_bookmarks p on p.id = a.parent
+        join moz_places b on b.id = a.fk
+        where b.url like 'https://github.com/%'
+        order by p.title, a.title
+        """
+    )
+
+    cur.execute(sql)
+
+    rows = cur.fetchall()
+
+    print(f"Writing '{outpath_custom}'")
+    with open(outpath_custom, "w") as f:
+        f.write(html_head("Bookmarks/GitHub"))
+        for row in rows:
+            parent_title = limited(row[0])
+            title = limited(ascii(row[1]))
+            url = row[2]
+            s = dedent(
+                """
+                    <li>
+                        <p>{0}<br />
+                        <b>{1}</b><br />
+                        <a target="_blank" href="{2}">{2}</a></p>
+                    </li>
+                    """
+            ).format(parent_title, title, url)
+            f.write(indent(s, " " * 8))
+        f.write(html_tail())
+
+    # ---
+
+    con.close()
 else:
     print(f"ERROR: Cannot find {db_path}")
 
