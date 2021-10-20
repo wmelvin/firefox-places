@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 import sqlite3
 import sys
 from pathlib import Path
@@ -7,14 +8,6 @@ from datetime import datetime
 from textwrap import dedent
 from textwrap import indent
 
-
-db_filename = "./data/PC_1_FirefoxData/places.sqlite"
-output_prefix = "pc1"
-do_github_links = False
-
-# db_filename = "./data/PC_2/places.sqlite"
-# output_prefix = "pc2"
-# do_github_links = True
 
 outpath = Path.cwd() / "output"
 
@@ -54,7 +47,7 @@ def html_tail():
     )
 
 
-def write_history_csv(cur):
+def write_history_csv(args, cur):
     sql = dedent(
         """
         SELECT
@@ -77,7 +70,7 @@ def write_history_csv(cur):
 
     rows = cur.fetchall()
 
-    file_name = outpath / f"{output_prefix}-history-places.csv"
+    file_name = outpath / f"{args.output_prefix}-history.csv"
 
     print(f"Writing '{file_name}'")
     with open(file_name, "w") as f:
@@ -111,7 +104,7 @@ def write_history_csv(cur):
             )
 
 
-def write_bookmarks_csv(cur):
+def write_bookmarks_csv(args, cur):
     sql = dedent(
         """
         SELECT
@@ -127,7 +120,7 @@ def write_bookmarks_csv(cur):
 
     rows = cur.fetchall()
 
-    file_name = outpath / f"{output_prefix}-bookmarks.csv"
+    file_name = outpath / f"{args.output_prefix}-bookmarks.csv"
 
     print(f"Writing '{file_name}'")
     with open(file_name, "w") as f:
@@ -138,7 +131,7 @@ def write_bookmarks_csv(cur):
             )
 
 
-def write_frecency_csv(cur):
+def write_frecency_csv(args, cur):
 
     sql = dedent(
         """
@@ -153,7 +146,7 @@ def write_frecency_csv(cur):
 
     rows = cur.fetchall()
 
-    file_name = outpath / f"{output_prefix}-frecency.csv"
+    file_name = outpath / f"{args.output_prefix}-frecency.csv"
 
     print(f"Writing '{file_name}'")
     with open(file_name, "w") as f:
@@ -166,7 +159,7 @@ def write_frecency_csv(cur):
             )
 
 
-def write_github_links_html(cur):
+def write_github_links_html(args, cur):
     sql = dedent(
         """
         select
@@ -186,7 +179,7 @@ def write_github_links_html(cur):
 
     rows = cur.fetchall()
 
-    file_name = outpath / f"{output_prefix}-github-links.html"
+    file_name = outpath / f"{args.output_prefix}-github-links.html"
 
     print(f"Writing '{file_name}'")
     with open(file_name, "w") as f:
@@ -208,7 +201,7 @@ def write_github_links_html(cur):
         f.write(html_tail())
 
 
-def write_frecency_html(cur):
+def write_frecency_html(args, cur):
 
     sql = dedent(
         """
@@ -224,7 +217,7 @@ def write_frecency_html(cur):
 
     rows = cur.fetchall()
 
-    file_name = outpath / f"{output_prefix}-recent-links.html"
+    file_name = outpath / f"{args.output_prefix}-recent-links.html"
 
     print(f"Writing '{file_name}'")
     with open(file_name, "w") as f:
@@ -242,23 +235,59 @@ def write_frecency_html(cur):
         f.write(html_tail())
 
 
+def get_args(argv):
+    ap = argparse.ArgumentParser(
+        description="Extracts information from a Firefox places.sqlite file."
+    )
+
+    ap.add_argument(
+        "places_file",
+        action="store",
+        help="Path to the places.sqlite file.",
+    )
+
+    ap.add_argument(
+        "-p",
+        "--output-prefix",
+        dest="output_prefix",
+        default="places",
+        action="store",
+        help="Name of prefix for output files. Default is 'places'.",
+    )
+
+    ap.add_argument(
+        "-g",
+        "--do-github",
+        dest="do_github",
+        action="store_true",
+        help="Include an output file listing bookmarks to github URLs.",
+    )
+
+    return ap.parse_args(argv[1:])
+
+
 def main(argv):
-    db_path = Path(db_filename)
+
+    args = get_args(argv)
+
+    # db_path = Path(db_filename)
+    db_path = Path(args.places_file)
 
     if db_path.exists():
         print(f"Reading {db_path}")
         con = sqlite3.connect(db_path)
         cur = con.cursor()
 
-        write_history_csv(cur)
+        write_history_csv(args, cur)
 
-        write_bookmarks_csv(cur)
+        write_bookmarks_csv(args, cur)
 
-        write_frecency_csv(cur)
+        write_frecency_csv(args, cur)
 
-        write_github_links_html(cur)
+        if args.do_github:
+            write_github_links_html(args, cur)
 
-        write_frecency_html(cur)
+        write_frecency_html(args, cur)
 
         con.close()
     else:
