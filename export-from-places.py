@@ -1,17 +1,25 @@
 #!/usr/bin/env python3
 
 import sqlite3
+import sys
 from pathlib import Path
 from datetime import datetime
 from textwrap import dedent
 from textwrap import indent
 
 
-# db_filename = "./data/PC_1/places.sqlite"
-# output_prefix = "pc1"
+db_filename = "./data/PC_1_FirefoxData/places.sqlite"
+output_prefix = "pc1"
 
-db_filename = "./data/PC_2/places.sqlite"
-output_prefix = "pc2"
+# db_filename = "./data/PC_2/places.sqlite"
+# output_prefix = "pc2"
+
+outpath = Path.cwd() / "output"
+outpath_history_places = outpath / f"{output_prefix}-history-places.csv"
+outpath_bookmarks = outpath / f"{output_prefix}-bookmarks.csv"
+outpath_frecency = outpath / f"{output_prefix}-frecency.csv"
+
+outpath_custom = outpath / f"{output_prefix}-github-links.html"
 
 
 def limited(value):
@@ -39,9 +47,6 @@ def html_head(title):
     ).format(title)
 
 
-# print(html_head('foo'))
-
-
 def html_tail():
     return dedent(
         """
@@ -52,24 +57,7 @@ def html_tail():
     )
 
 
-# print(html_tail())
-
-
-outpath = Path.cwd() / "output"
-outpath_history_places = outpath / f"{output_prefix}-history-places.csv"
-outpath_bookmarks = outpath / f"{output_prefix}-bookmarks.csv"
-outpath_frecency = outpath / f"{output_prefix}-frecency.csv"
-
-outpath_custom = outpath / f"{output_prefix}-github-links.html"
-
-db_path = Path(db_filename)
-if db_path.exists():
-    print(f"Reading {db_path}")
-    con = sqlite3.connect(db_path)
-    cur = con.cursor()
-
-    # --- History-Places:
-
+def write_history(cur):
     sql = dedent(
         """
         SELECT
@@ -123,8 +111,8 @@ if db_path.exists():
                 )
             )
 
-    # --- Bookmarks:
 
+def write_bookmarks(cur):
     sql = dedent(
         """
         SELECT
@@ -148,6 +136,8 @@ if db_path.exists():
                 '"{0}","{1}","{2}"{3}'.format(row[0], row[1], row[2], "\n")
             )
 
+
+def write_frecency(cur):
     # --- Frecency:
 
     sql = dedent(
@@ -173,6 +163,8 @@ if db_path.exists():
                 )
             )
 
+
+def write_custom_github(cur):
     # --- 2021-10-01 Custom: GitHub?
 
     sql = dedent(
@@ -213,10 +205,30 @@ if db_path.exists():
             f.write(indent(s, " " * 8))
         f.write(html_tail())
 
-    # ---
 
-    con.close()
-else:
-    print(f"ERROR: Cannot find {db_path}")
+def main(argv):
+    db_path = Path(db_filename)
 
-print("Done.")
+    if db_path.exists():
+        print(f"Reading {db_path}")
+        con = sqlite3.connect(db_path)
+        cur = con.cursor()
+
+        write_history(cur)
+
+        write_bookmarks(cur)
+
+        write_frecency(cur)
+
+        #  write_custom_github(cur)
+
+        con.close()
+    else:
+        print(f"ERROR: Cannot find {db_path}")
+
+    print("Done.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
