@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+
 import argparse
 import sqlite3
 import sys
@@ -129,6 +130,46 @@ def write_bookmarks_csv(args, cur):
             f.write(
                 '"{0}","{1}","{2}"{3}'.format(row[0], row[1], row[2], "\n")
             )
+
+
+def write_bookmarks_html(args, cur):
+    sql = dedent(
+        """
+        SELECT
+            p.title,
+            a.title,
+            b.url
+        FROM (moz_bookmarks a JOIN moz_places b ON b.id = a.fk)
+        JOIN moz_bookmarks p ON p.id = a.parent
+        ORDER BY p.title, a.title
+        """
+    )
+
+    cur.execute(sql)
+
+    rows = cur.fetchall()
+
+    file_name = outpath / f"{args.output_prefix}-bookmarks.html"
+
+    print(f"Writing '{file_name}'")
+    with open(file_name, "w") as f:
+
+        f.write(html_head("Bookmarks"))
+        for row in rows:
+            parent_title = limited(row[0])
+            title = limited(ascii(row[1]))
+            url = row[2]
+            s = dedent(
+                """
+                    <li>
+                        <p>{0}<br />
+                        <b>{1}</b><br />
+                        <a target="_blank" href="{2}">{2}</a></p>
+                    </li>
+                    """
+            ).format(parent_title, title, url)
+            f.write(indent(s, " " * 8))
+        f.write(html_tail())
 
 
 def write_frecency_csv(args, cur):
@@ -270,7 +311,6 @@ def main(argv):
 
     args = get_args(argv)
 
-    # db_path = Path(db_filename)
     db_path = Path(args.places_file)
 
     if db_path.exists():
@@ -279,15 +319,12 @@ def main(argv):
         cur = con.cursor()
 
         write_history_csv(args, cur)
-
         write_bookmarks_csv(args, cur)
-
+        write_bookmarks_html(args, cur)
         write_frecency_csv(args, cur)
-
+        write_frecency_html(args, cur)
         if args.do_github:
             write_github_links_html(args, cur)
-
-        write_frecency_html(args, cur)
 
         con.close()
     else:
