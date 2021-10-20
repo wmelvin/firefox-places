@@ -10,16 +10,13 @@ from textwrap import indent
 
 db_filename = "./data/PC_1_FirefoxData/places.sqlite"
 output_prefix = "pc1"
+do_github_links = False
 
 # db_filename = "./data/PC_2/places.sqlite"
 # output_prefix = "pc2"
+# do_github_links = True
 
 outpath = Path.cwd() / "output"
-outpath_history_places = outpath / f"{output_prefix}-history-places.csv"
-outpath_bookmarks = outpath / f"{output_prefix}-bookmarks.csv"
-outpath_frecency = outpath / f"{output_prefix}-frecency.csv"
-
-outpath_custom = outpath / f"{output_prefix}-github-links.html"
 
 
 def limited(value):
@@ -57,7 +54,7 @@ def html_tail():
     )
 
 
-def write_history(cur):
+def write_history_csv(cur):
     sql = dedent(
         """
         SELECT
@@ -80,8 +77,10 @@ def write_history(cur):
 
     rows = cur.fetchall()
 
-    print(f"Writing '{outpath_history_places}'")
-    with open(outpath_history_places, "w") as f:
+    file_name = outpath / f"{output_prefix}-history-places.csv"
+
+    print(f"Writing '{file_name}'")
+    with open(file_name, "w") as f:
         f.write("url,title,host,visit_count,frecency,visit_date\n")
         for row in rows:
             url = limited(row[0])
@@ -112,7 +111,7 @@ def write_history(cur):
             )
 
 
-def write_bookmarks(cur):
+def write_bookmarks_csv(cur):
     sql = dedent(
         """
         SELECT
@@ -128,8 +127,10 @@ def write_bookmarks(cur):
 
     rows = cur.fetchall()
 
-    print(f"Writing '{outpath_bookmarks}'")
-    with open(outpath_bookmarks, "w") as f:
+    file_name = outpath / f"{output_prefix}-bookmarks.csv"
+
+    print(f"Writing '{file_name}'")
+    with open(file_name, "w") as f:
         f.write("parent_title,bookmark_title,url\n")
         for row in rows:
             f.write(
@@ -137,8 +138,7 @@ def write_bookmarks(cur):
             )
 
 
-def write_frecency(cur):
-    # --- Frecency:
+def write_frecency_csv(cur):
 
     sql = dedent(
         """
@@ -153,8 +153,10 @@ def write_frecency(cur):
 
     rows = cur.fetchall()
 
-    print(f"Writing '{outpath_frecency}'")
-    with open(outpath_frecency, "w") as f:
+    file_name = outpath / f"{output_prefix}-frecency.csv"
+
+    print(f"Writing '{file_name}'")
+    with open(file_name, "w") as f:
         f.write("url,title,frecency\n")
         for row in rows:
             f.write(
@@ -164,9 +166,7 @@ def write_frecency(cur):
             )
 
 
-def write_custom_github(cur):
-    # --- 2021-10-01 Custom: GitHub?
-
+def write_github_links_html(cur):
     sql = dedent(
         """
         select
@@ -186,8 +186,10 @@ def write_custom_github(cur):
 
     rows = cur.fetchall()
 
-    print(f"Writing '{outpath_custom}'")
-    with open(outpath_custom, "w") as f:
+    file_name = outpath / f"{output_prefix}-github-links.html"
+
+    print(f"Writing '{file_name}'")
+    with open(file_name, "w") as f:
         f.write(html_head("Bookmarks/GitHub"))
         for row in rows:
             parent_title = limited(row[0])
@@ -206,6 +208,40 @@ def write_custom_github(cur):
         f.write(html_tail())
 
 
+def write_frecency_html(cur):
+
+    sql = dedent(
+        """
+        SELECT DISTINCT
+            url, title, frecency
+        FROM moz_places
+        ORDER BY frecency DESC
+        LIMIT 100
+        """
+    )
+
+    cur.execute(sql)
+
+    rows = cur.fetchall()
+
+    file_name = outpath / f"{output_prefix}-recent-links.html"
+
+    print(f"Writing '{file_name}'")
+    with open(file_name, "w") as f:
+        f.write(html_head("Top 100 Recent/Frequent  Links"))
+        for row in rows:
+            s = dedent(
+                """
+                    <li>
+                        <p>{1}<br />
+                        <a target="_blank" href="{0}">{0}</a></p>
+                    </li>
+                    """
+            ).format(row[0], row[1])
+            f.write(indent(s, " " * 8))
+        f.write(html_tail())
+
+
 def main(argv):
     db_path = Path(db_filename)
 
@@ -214,13 +250,15 @@ def main(argv):
         con = sqlite3.connect(db_path)
         cur = con.cursor()
 
-        write_history(cur)
+        write_history_csv(cur)
 
-        write_bookmarks(cur)
+        write_bookmarks_csv(cur)
 
-        write_frecency(cur)
+        write_frecency_csv(cur)
 
-        #  write_custom_github(cur)
+        write_github_links_html(cur)
+
+        write_frecency_html(cur)
 
         con.close()
     else:
