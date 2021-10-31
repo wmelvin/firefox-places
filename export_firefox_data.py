@@ -4,11 +4,14 @@
 import argparse
 import sqlite3
 import sys
+from collections import namedtuple
 from pathlib import Path
 from datetime import datetime
 from textwrap import dedent
 from textwrap import indent
 
+
+Bookmark = namedtuple("Bookmark", "title, url, parent_path")
 
 outpath = Path.cwd() / "output"
 
@@ -26,6 +29,14 @@ def html_style():
         body {
             font-family: sans-serif;
             padding: 2rem;
+        }
+        .bookmark-path {
+            /* color: #258d25; */
+            color: gray;
+        }
+        .bookmark-title {
+            /* color: #7a361f; */
+            color: black;
         }
     """
     return s.lstrip("\n").rstrip()
@@ -248,7 +259,7 @@ def get_parent_path(con, id):
     return parent_path
 
 
-def write_github_links_html(args, con):
+def get_bookmarks(con):
     sql = dedent(
         """
         SELECT
@@ -257,45 +268,98 @@ def write_github_links_html(args, con):
             a.parent
         FROM
             moz_bookmarks a
-        JOIN moz_places b ON b.id = a.fk
-        WHERE b.url like 'https://github.com/%'
-        ORDER BY a.title
+        JOIN moz_places b
+        ON b.id = a.fk
         """
     )
-
     cur = con.cursor()
     cur.execute(sql)
-
     rows = cur.fetchall()
-
     bmks = []
     for row in rows:
-        #  Append as tuple(parent_path, title, url)
-        bmks.append(
-            (get_parent_path(con, row[2]), row[0], row[1])
-        )
-    #  Sort by parent_path, title.
-    bmks.sort(key=lambda item: item[0] + item[1])
+        title = row[0]
+        url = row[1]
+        parent_id = row[2]
+        if title is None:
+            title = f"({url})"
+        bmks.append(Bookmark(title, url, get_parent_path(con, parent_id)))
+    bmks.sort(key=lambda item: item.parent_path + item.title)
+    return bmks
+
+
+# def write_github_links_html(args, con):
+#     sql = dedent(
+#         """
+#         SELECT
+#             a.title,
+#             b.url,
+#             a.parent
+#         FROM
+#             moz_bookmarks a
+#         JOIN moz_places b ON b.id = a.fk
+#         WHERE b.url like 'https://github.com/%'
+#         ORDER BY a.title
+#         """
+#     )
+
+#     cur = con.cursor()
+#     cur.execute(sql)
+
+#     rows = cur.fetchall()
+
+#     bmks = []
+#     for row in rows:
+#         #  Append as tuple(parent_path, title, url)
+#         bmks.append(
+#             (get_parent_path(con, row[2]), row[0], row[1])
+#         )
+#     #  Sort by parent_path, title.
+#     bmks.sort(key=lambda item: item[0] + item[1])
+
+#     file_name = outpath / f"{args.output_prefix}-github-links.html"
+
+#     print(f"Writing '{file_name}'")
+#     with open(file_name, "w") as f:
+#         f.write(html_head("Bookmarks/GitHub"))
+#         for bmk in bmks:
+#             parent_path = bmk[0]
+#             title = limited(ascii(bmk[1]))
+#             url = bmk[2]
+#             s = dedent(
+#                 """
+#                     <li>
+#                         <p>{0}<br />
+#                         <b>{1}</b><br />
+#                         <a target="_blank" href="{2}">{2}</a></p>
+#                     </li>
+#                     """
+#             ).format(parent_path, title, url)
+#             f.write(indent(s, " " * 8))
+#         f.write(html_tail())
+
+
+def write_github_links_html(args, con):
 
     file_name = outpath / f"{args.output_prefix}-github-links.html"
+
+    bmks = get_bookmarks(con)
 
     print(f"Writing '{file_name}'")
     with open(file_name, "w") as f:
         f.write(html_head("Bookmarks/GitHub"))
         for bmk in bmks:
-            parent_path = bmk[0]
-            title = limited(ascii(bmk[1]))
-            url = bmk[2]
-            s = dedent(
-                """
-                    <li>
-                        <p>{0}<br />
-                        <b>{1}</b><br />
-                        <a target="_blank" href="{2}">{2}</a></p>
-                    </li>
+            if bmk.url.startswith('https://github.com/'):
+                title = limited(ascii(bmk.title))
+                s = dedent(
                     """
-            ).format(parent_path, title, url)
-            f.write(indent(s, " " * 8))
+                        <li>
+                            <p><span class="bookmark-path">{0}</span><br />
+                            <span class="bookmark-title">{1}</span><br />
+                            <a target="_blank" href="{2}">{2}</a></p>
+                        </li>
+                        """
+                ).format(bmk.parent_path, title, bmk.url)
+                f.write(indent(s, " " * 8))
         f.write(html_tail())
 
 
