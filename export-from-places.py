@@ -200,13 +200,37 @@ def write_frecency_csv(args, cur):
             )
 
 
-def write_github_links_html(args, cur):
+def get_parent_path(con, id):
+    cur = con.cursor()
+
+    parent_id = id
+    s = "/"
+
+    while 0 < parent_id:
+        sql = (
+            "select parent, title from moz_bookmarks where id = {0}"
+        ).format(parent_id)
+
+        cur.execute(sql)
+
+        rows = cur.fetchall()
+        assert len(rows) == 1
+
+        parent_id = rows[0][0]
+        if 0 < parent_id:
+            s = f"/{rows[0][1]}{s}"
+
+    return s
+
+
+def write_github_links_html(args, con, cur):
     sql = dedent(
         """
         select
             p.title as parent_title,
             a.title,
-            b.url
+            b.url,
+            a.parent
         from
             moz_bookmarks a
         join moz_bookmarks p on p.id = a.parent
@@ -226,7 +250,8 @@ def write_github_links_html(args, cur):
     with open(file_name, "w") as f:
         f.write(html_head("Bookmarks/GitHub"))
         for row in rows:
-            parent_title = limited(row[0])
+            parent_path = get_parent_path(con, row[3])
+            # parent_title = limited(row[0])
             title = limited(ascii(row[1]))
             url = row[2]
             s = dedent(
@@ -237,7 +262,7 @@ def write_github_links_html(args, cur):
                         <a target="_blank" href="{2}">{2}</a></p>
                     </li>
                     """
-            ).format(parent_title, title, url)
+            ).format(parent_path, title, url)
             f.write(indent(s, " " * 8))
         f.write(html_tail())
 
@@ -324,7 +349,7 @@ def main(argv):
         write_frecency_csv(args, cur)
         write_frecency_html(args, cur)
         if args.do_github:
-            write_github_links_html(args, cur)
+            write_github_links_html(args, con, cur)
 
         con.close()
     else:
