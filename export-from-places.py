@@ -21,6 +21,16 @@ def limited(value):
         return s[:177] + "..."
 
 
+def html_style():
+    s = """
+        body {
+            font-family: sans-serif;
+            padding: 2rem;
+        }
+    """
+    return s.lstrip("\n").rstrip()
+
+
 def html_head(title):
     return dedent(
         """
@@ -29,26 +39,30 @@ def html_head(title):
         <head>
             <title>{0}</title>
             <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-            <link rel="stylesheet" href="style.css" />
+            <style>
+        {1}
+            </style>
         </head>
         <body>
-            <h1>{0}</h1>
-            <ul>
+        <h1>{0}</h1>
+        <ul>
         """
-    ).format(title)
+    ).format(title, html_style())
 
 
 def html_tail():
     return dedent(
         """
         </ul>
+        <p>&nbsp;</p>
+        <hr>
         </body>
         </html>
         """
     )
 
 
-def write_history_csv(args, cur):
+def write_history_csv(args, con):
     sql = dedent(
         """
         SELECT
@@ -67,6 +81,7 @@ def write_history_csv(args, cur):
         """
     )
 
+    cur = con.cursor()
     cur.execute(sql)
 
     rows = cur.fetchall()
@@ -81,15 +96,15 @@ def write_history_csv(args, cur):
 
             title = limited(str(row[1]).replace('"', "'"))
 
-            # Use slicing to reverse string [begin:end:step].
+            #  Use slicing to reverse string [begin:end:step].
             host = row[2][::-1]
 
             count = row[3]
 
             frecency = row[4]
 
-            # The date values in the table are in microseconds since
-            # the Unix epoch. Convert to seconds.
+            #  The date values in the table are in microseconds since
+            #  the Unix epoch. Convert to seconds.
             dts = row[5] / 1000000
 
             f.write(
@@ -105,7 +120,7 @@ def write_history_csv(args, cur):
             )
 
 
-def write_bookmarks_csv(args, cur):
+def write_bookmarks_csv(args, con):
     sql = dedent(
         """
         SELECT
@@ -117,6 +132,7 @@ def write_bookmarks_csv(args, cur):
         """
     )
 
+    cur = con.cursor()
     cur.execute(sql)
 
     rows = cur.fetchall()
@@ -132,7 +148,7 @@ def write_bookmarks_csv(args, cur):
             )
 
 
-def write_bookmarks_html(args, cur):
+def write_bookmarks_html(args, con):
     sql = dedent(
         """
         SELECT
@@ -145,6 +161,7 @@ def write_bookmarks_html(args, cur):
         """
     )
 
+    cur = con.cursor()
     cur.execute(sql)
 
     rows = cur.fetchall()
@@ -172,17 +189,20 @@ def write_bookmarks_html(args, cur):
         f.write(html_tail())
 
 
-def write_frecency_csv(args, cur):
+def write_frecency_csv(args, con):
 
     sql = dedent(
         """
         SELECT DISTINCT
-            url, title, frecency
+            url,
+            title,
+            frecency
         FROM moz_places
         ORDER BY frecency DESC
         """
     )
 
+    cur = con.cursor()
     cur.execute(sql)
 
     rows = cur.fetchall()
@@ -203,57 +223,69 @@ def write_frecency_csv(args, cur):
 def get_parent_path(con, id):
     cur = con.cursor()
 
+    depth = 0
     parent_id = id
-    s = "/"
-
+    parent_path = "/"
     while 0 < parent_id:
+        #  It appears that the root always has id=0. If that is not the case
+        #  this max-depth check (99 seems like a good arbitrary value) will
+        #  prevent an infinate loop.
+        depth += 1
+        assert depth < 99
+
         sql = (
-            "select parent, title from moz_bookmarks where id = {0}"
+            "SELECT parent, title FROM moz_bookmarks WHERE id = {0}"
         ).format(parent_id)
 
         cur.execute(sql)
-
         rows = cur.fetchall()
         assert len(rows) == 1
 
         parent_id = rows[0][0]
         if 0 < parent_id:
-            s = f"/{rows[0][1]}{s}"
+            parent_path = f"/{rows[0][1]}{parent_path}"
 
-    return s
+    return parent_path
 
 
-def write_github_links_html(args, con, cur):
+def write_github_links_html(args, con):
     sql = dedent(
         """
-        select
-            p.title as parent_title,
+        SELECT
             a.title,
             b.url,
             a.parent
-        from
+        FROM
             moz_bookmarks a
-        join moz_bookmarks p on p.id = a.parent
-        join moz_places b on b.id = a.fk
-        where b.url like 'https://github.com/%'
-        order by p.title, a.title
+        JOIN moz_places b ON b.id = a.fk
+        WHERE b.url like 'https://github.com/%'
+        ORDER BY a.title
         """
     )
 
+    cur = con.cursor()
     cur.execute(sql)
 
     rows = cur.fetchall()
+
+    bmks = []
+    for row in rows:
+        #  Append as tuple(parent_path, title, url)
+        bmks.append(
+            (get_parent_path(con, row[2]), row[0], row[1])
+        )
+    #  Sort by parent_path, title.
+    bmks.sort(key=lambda item: item[0] + item[1])
 
     file_name = outpath / f"{args.output_prefix}-github-links.html"
 
     print(f"Writing '{file_name}'")
     with open(file_name, "w") as f:
         f.write(html_head("Bookmarks/GitHub"))
-        for row in rows:
-            parent_path = get_parent_path(con, row[3])
-            # parent_title = limited(row[0])
-            title = limited(ascii(row[1]))
-            url = row[2]
+        for bmk in bmks:
+            parent_path = bmk[0]
+            title = limited(ascii(bmk[1]))
+            url = bmk[2]
             s = dedent(
                 """
                     <li>
@@ -267,7 +299,7 @@ def write_github_links_html(args, con, cur):
         f.write(html_tail())
 
 
-def write_frecency_html(args, cur):
+def write_frecency_html(args, con):
 
     sql = dedent(
         """
@@ -279,6 +311,7 @@ def write_frecency_html(args, cur):
         """
     )
 
+    cur = con.cursor()
     cur.execute(sql)
 
     rows = cur.fetchall()
@@ -341,15 +374,15 @@ def main(argv):
     if db_path.exists():
         print(f"Reading {db_path}")
         con = sqlite3.connect(db_path)
-        cur = con.cursor()
+        # cur = con.cursor()
 
-        write_history_csv(args, cur)
-        write_bookmarks_csv(args, cur)
-        write_bookmarks_html(args, cur)
-        write_frecency_csv(args, cur)
-        write_frecency_html(args, cur)
+        write_history_csv(args, con)
+        write_bookmarks_csv(args, con)
+        write_bookmarks_html(args, con)
+        write_frecency_csv(args, con)
+        write_frecency_html(args, con)
         if args.do_github:
-            write_github_links_html(args, con, cur)
+            write_github_links_html(args, con)
 
         con.close()
     else:
