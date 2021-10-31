@@ -1,19 +1,25 @@
 #!/usr/bin/env python3
 
-
 import argparse
 import sqlite3
 import sys
+
 from collections import namedtuple
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 from textwrap import dedent
 from textwrap import indent
 
 
-Bookmark = namedtuple("Bookmark", "title, url, parent_path")
+app_name = "export_firefox_data.py"
+
+run_dt = datetime.now()
 
 outpath = Path.cwd() / "output"
+
+Bookmark = namedtuple("Bookmark", "title, url, parent_path")
+
+bookmarks = []
 
 
 def limited(value):
@@ -29,6 +35,11 @@ def html_style():
         body { font-family: sans-serif; padding: 2rem; }
         .bookmark-path { color: gray; }
         .bookmark-title { color: black; }
+        #footer {
+            border-top: 1px solid black;
+            font-size: x-small;
+            margin-top: 2rem;
+        }
     """
     return s.lstrip("\n").rstrip()
 
@@ -39,29 +50,42 @@ def html_head(title):
         <!DOCTYPE html>
         <html lang="en">
         <head>
-            <title>{0}</title>
-            <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+            <meta name="generator" content="{0}">
+            <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+            <title>{1}</title>
             <style>
-        {1}
+        {2}
             </style>
         </head>
         <body>
-        <h1>{0}</h1>
+        <h1>{1}</h1>
         <ul>
         """
-    ).format(title, html_style())
+    ).format(app_name, title, html_style()).strip("\n")
 
 
 def html_tail():
     return dedent(
         """
         </ul>
-        <p>&nbsp;</p>
-        <hr>
+        <div id="footer">
+          Created by {0} at {1}.
+        </div>
         </body>
         </html>
         """
-    )
+    ).format(app_name, run_dt.strftime("%Y-%m-%d %H:%M"))
+
+
+def htm_txt(text: str) -> str:
+    s = text.replace("&", "&amp;")
+    s = s.replace("<", "&lt;")
+    s = s.replace(">", "&gt;")
+    return s
+
+
+def htm_url(url: str) -> str:
+    return url.replace("&", "%26")
 
 
 def write_history_csv(args, con):
@@ -122,72 +146,152 @@ def write_history_csv(args, con):
             )
 
 
-def write_bookmarks_csv(args, con):
+def get_parent_path(con, id):
+    cur = con.cursor()
+
+    depth = 0
+    parent_id = id
+    parent_path = "/"
+    while 0 < parent_id:
+        #  It appears that the root always has id=0. If that is not the case
+        #  this max-depth check (99 seems like a good arbitrary value) will
+        #  prevent an infinate loop.
+        depth += 1
+        assert depth < 99
+
+        sql = (
+            "SELECT parent, title FROM moz_bookmarks WHERE id = {0}"
+        ).format(parent_id)
+
+        cur.execute(sql)
+        rows = cur.fetchall()
+        assert len(rows) == 1
+
+        parent_id = int(rows[0][0])
+        if 0 < parent_id:
+            title = str(rows[0][1])
+            parent_path = f"/{title}{parent_path}"
+
+    return parent_path
+
+
+def get_bookmarks(con):
+
+    global bookmarks
+    if 0 < len(bookmarks):
+        return bookmarks
+
     sql = dedent(
         """
         SELECT
-            p.title,
             a.title,
-            b.url
-        FROM (moz_bookmarks a JOIN moz_places b ON b.id = a.fk)
-        JOIN moz_bookmarks p ON p.id = a.parent
+            b.url,
+            a.parent
+        FROM
+            moz_bookmarks a
+        JOIN moz_places b
+        ON b.id = a.fk
         """
     )
-
     cur = con.cursor()
     cur.execute(sql)
-
     rows = cur.fetchall()
 
+    for row in rows:
+        url = str(row[1])
+
+        if not url.startswith("http"):
+            print(f"SKIP NON-HTTP URL: '{url}'")
+            continue
+
+        title = str(row[0])
+        parent_id = int(row[2])
+
+        if title is None:
+            title = f"({url})"
+
+        bookmarks.append(Bookmark(title, url, get_parent_path(con, parent_id)))
+
+    bookmarks.sort(key=lambda item: item.parent_path + item.title)
+
+    return bookmarks
+
+
+def write_bookmarks_csv(args, con):
     file_name = outpath / f"{args.output_prefix}-bookmarks.csv"
+
+    bmks = get_bookmarks(con)
 
     print(f"Writing '{file_name}'")
     with open(file_name, "w") as f:
-        f.write("parent_title,bookmark_title,url\n")
-        for row in rows:
+        f.write("parent_path,title,url\n")
+        for bmk in bmks:
             f.write(
-                '"{0}","{1}","{2}"{3}'.format(row[0], row[1], row[2], "\n")
+                '"{0}","{1}","{2}"\n'.format(
+                    bmk.parent_path, bmk.title, bmk.url
+                )
             )
 
 
 def write_bookmarks_html(args, con):
-    sql = dedent(
-        """
-        SELECT
-            p.title,
-            a.title,
-            b.url
-        FROM (moz_bookmarks a JOIN moz_places b ON b.id = a.fk)
-        JOIN moz_bookmarks p ON p.id = a.parent
-        ORDER BY p.title, a.title
-        """
-    )
-
-    cur = con.cursor()
-    cur.execute(sql)
-
-    rows = cur.fetchall()
-
     file_name = outpath / f"{args.output_prefix}-bookmarks.html"
+
+    bmks = get_bookmarks(con)
 
     print(f"Writing '{file_name}'")
     with open(file_name, "w") as f:
 
         f.write(html_head("Bookmarks"))
-        for row in rows:
-            parent_title = limited(row[0])
-            title = limited(ascii(row[1]))
-            url = row[2]
+
+        for bmk in bmks:
+            title = limited(ascii(bmk.title))
             s = dedent(
                 """
                     <li>
-                        <p>{0}<br />
-                        <b>{1}</b><br />
-                        <a target="_blank" href="{2}">{2}</a></p>
+                        <p><span class="bookmark-path">{0}</span><br />
+                        <span class="bookmark-title">{1}</span><br />
+                        <a target="_blank" href=
+                        "{2}">
+                        {2}</a></p>
                     </li>
                     """
-            ).format(parent_title, title, url)
+            ).format(
+                htm_txt(bmk.parent_path),
+                htm_txt(title),
+                htm_url(bmk.url)
+            )
             f.write(indent(s, " " * 8))
+        f.write(html_tail())
+
+
+def write_github_links_html(args, con):
+
+    file_name = outpath / f"{args.output_prefix}-github-links.html"
+
+    bmks = get_bookmarks(con)
+
+    print(f"Writing '{file_name}'")
+    with open(file_name, "w") as f:
+        f.write(html_head("Bookmarks/GitHub"))
+        for bmk in bmks:
+            if bmk.url.startswith("https://github.com/"):
+                title = limited(ascii(bmk.title))
+                s = dedent(
+                    """
+                        <li>
+                            <p><span class="bookmark-path">{0}</span><br />
+                            <span class="bookmark-title">{1}</span><br />
+                            <a target="_blank" href=
+                            "{2}">
+                            {2}</a></p>
+                        </li>
+                        """
+                ).format(
+                    htm_txt(bmk.parent_path),
+                    htm_txt(title),
+                    htm_url(bmk.url)
+                )
+                f.write(indent(s, " " * 8))
         f.write(html_tail())
 
 
@@ -222,87 +326,6 @@ def write_frecency_csv(args, con):
             )
 
 
-def get_parent_path(con, id):
-    cur = con.cursor()
-
-    depth = 0
-    parent_id = id
-    parent_path = "/"
-    while 0 < parent_id:
-        #  It appears that the root always has id=0. If that is not the case
-        #  this max-depth check (99 seems like a good arbitrary value) will
-        #  prevent an infinate loop.
-        depth += 1
-        assert depth < 99
-
-        sql = (
-            "SELECT parent, title FROM moz_bookmarks WHERE id = {0}"
-        ).format(parent_id)
-
-        cur.execute(sql)
-        rows = cur.fetchall()
-        assert len(rows) == 1
-
-        parent_id = rows[0][0]
-        if 0 < parent_id:
-            parent_path = f"/{rows[0][1]}{parent_path}"
-
-    return parent_path
-
-
-def get_bookmarks(con):
-    sql = dedent(
-        """
-        SELECT
-            a.title,
-            b.url,
-            a.parent
-        FROM
-            moz_bookmarks a
-        JOIN moz_places b
-        ON b.id = a.fk
-        """
-    )
-    cur = con.cursor()
-    cur.execute(sql)
-    rows = cur.fetchall()
-    bmks = []
-    for row in rows:
-        title = row[0]
-        url = row[1]
-        parent_id = row[2]
-        if title is None:
-            title = f"({url})"
-        bmks.append(Bookmark(title, url, get_parent_path(con, parent_id)))
-    bmks.sort(key=lambda item: item.parent_path + item.title)
-    return bmks
-
-
-def write_github_links_html(args, con):
-
-    file_name = outpath / f"{args.output_prefix}-github-links.html"
-
-    bmks = get_bookmarks(con)
-
-    print(f"Writing '{file_name}'")
-    with open(file_name, "w") as f:
-        f.write(html_head("Bookmarks/GitHub"))
-        for bmk in bmks:
-            if bmk.url.startswith('https://github.com/'):
-                title = limited(ascii(bmk.title))
-                s = dedent(
-                    """
-                        <li>
-                            <p><span class="bookmark-path">{0}</span><br />
-                            <span class="bookmark-title">{1}</span><br />
-                            <a target="_blank" href="{2}">{2}</a></p>
-                        </li>
-                        """
-                ).format(bmk.parent_path, title, bmk.url)
-                f.write(indent(s, " " * 8))
-        f.write(html_tail())
-
-
 def write_frecency_html(args, con):
 
     sql = dedent(
@@ -326,14 +349,20 @@ def write_frecency_html(args, con):
     with open(file_name, "w") as f:
         f.write(html_head("Top 100 Recent/Frequent  Links"))
         for row in rows:
+            url = row[0]
+            title = row[1]
+            if title is None:
+                title = f"({url})"
             s = dedent(
                 """
                     <li>
                         <p>{1}<br />
-                        <a target="_blank" href="{0}">{0}</a></p>
+                        <a target="_blank" href=
+                        "{0}">
+                        {0}</a></p>
                     </li>
                     """
-            ).format(row[0], row[1])
+            ).format(htm_url(url), htm_txt(title))
             f.write(indent(s, " " * 8))
         f.write(html_tail())
 
