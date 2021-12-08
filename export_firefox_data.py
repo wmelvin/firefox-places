@@ -7,8 +7,7 @@ import sys
 from collections import namedtuple
 from datetime import datetime
 from pathlib import Path
-from textwrap import dedent
-from textwrap import indent
+from textwrap import dedent, indent
 
 
 app_name = "export_firefox_data.py"
@@ -392,7 +391,7 @@ def get_args(argv):
         "--do-github",
         dest="do_github",
         action="store_true",
-        help="Include an output file listing bookmarks to github URLs.",
+        help="Include an output file listing bookmarks for github URLs.",
     )
 
     return ap.parse_args(argv[1:])
@@ -407,7 +406,6 @@ def main(argv):
     if db_path.exists():
         print(f"Reading {db_path}")
         con = sqlite3.connect(db_path)
-        # cur = con.cursor()
 
         write_history_csv(args, con)
         write_bookmarks_csv(args, con)
