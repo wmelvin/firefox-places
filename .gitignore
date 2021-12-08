@@ -1,0 +1,18 @@
+# Private archives, notes, etc.
+private/
+notes-private.txt
+
+# Python.
+venv/
+__pycache__/
+
+# Tools config.
+.idea/
+.vscode/
+
+# App-specific.
+_0_bak/
+data/
+output/
+sausage.sh
+wipbak-list.txt
