@@ -403,21 +403,22 @@ def main(argv):
 
     db_path = Path(args.places_file)
 
-    if db_path.exists():
-        print(f"Reading {db_path}")
-        con = sqlite3.connect(db_path)
-
-        write_history_csv(args, con)
-        write_bookmarks_csv(args, con)
-        write_bookmarks_html(args, con)
-        write_frecency_csv(args, con)
-        write_frecency_html(args, con)
-        if args.do_github:
-            write_github_links_html(args, con)
-
-        con.close()
-    else:
+    if not db_path.exists():
         print(f"ERROR: Cannot find {db_path}")
+        return 1
+
+    print(f"Reading {db_path}")
+    con = sqlite3.connect(db_path)
+
+    write_history_csv(args, con)
+    write_bookmarks_csv(args, con)
+    write_bookmarks_html(args, con)
+    write_frecency_csv(args, con)
+    write_frecency_html(args, con)
+    if args.do_github:
+        write_github_links_html(args, con)
+
+    con.close()
 
     print("Done.")
     return 0

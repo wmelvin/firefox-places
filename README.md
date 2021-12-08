@@ -8,7 +8,7 @@ For exploring the Places database, and trying different queries, check out [Data
 
 ## Input
 
-It is probably safer to make a copy of the **places.sqlite** file, when FireFox is not running, and work with that when running this tool.
+It is probably safer to make a copy of the **places.sqlite** file, when Firefox is not running, and work with that when running this tool.
 
 ## Output
 
