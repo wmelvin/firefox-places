@@ -177,7 +177,7 @@ def get_parent_path(con, id):
 def get_bookmarks(con):
 
     global bookmarks
-    if 0 < len(bookmarks):
+    if bookmarks:
         return bookmarks
 
     sql = dedent(
@@ -209,7 +209,9 @@ def get_bookmarks(con):
         if title is None:
             title = f"({url})"
 
-        bookmarks.append(Bookmark(title, url, get_parent_path(con, parent_id)))
+        bookmarks.append(
+            Bookmark(title, url, get_parent_path(con, parent_id))
+        )
 
     bookmarks.sort(key=lambda item: item.parent_path + item.title)
 
