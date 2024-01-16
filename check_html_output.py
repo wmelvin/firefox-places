@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 
 import sys
-
-from html5lib.html5parser import HTMLParser, ParseError
 from pathlib import Path
 
+from html5lib.html5parser import HTMLParser, ParseError
 
 #  Note: When a ParseError occurs, the error messages do not give much
 #  context.  Running the tidy (http://www.html-tidy.org/) console
@@ -37,7 +36,7 @@ def check_html(file_name, expect_footer):
 
 
 def main(argv):
-    if len(argv) == 2:
+    if len(argv) == 2:  # noqa: PLR2004
         #  Can take one argument that is the path containing HTML files.
         check_path = Path(argv[1])
         if not check_path.exists():
@@ -69,5 +68,5 @@ def main(argv):
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv))

@@ -2,13 +2,10 @@
 
 import argparse
 import sqlite3
-import sys
-
-from collections import namedtuple
 from datetime import datetime
 from pathlib import Path
 from textwrap import dedent, indent
-
+from typing import NamedTuple
 
 app_name = "export_firefox_data.py"
 
@@ -16,17 +13,21 @@ run_dt = datetime.now()
 
 outpath = Path.cwd() / "output"
 
-Bookmark = namedtuple("Bookmark", "title, url, parent_path")
+
+class Bookmark(NamedTuple):
+    title: str
+    url: str
+    parent_path: str
+
 
 bookmarks = []
 
 
 def limited(value):
     s = str(value)
-    if len(s) <= 180:
+    if len(s) <= 180:  # noqa: PLR2004
         return s
-    else:
-        return s[:177] + "..."
+    return s[:177] + "..."
 
 
 def html_style():
@@ -44,8 +45,9 @@ def html_style():
 
 
 def html_head(title):
-    return dedent(
-        """
+    return (
+        dedent(
+            """
         <!DOCTYPE html>
         <html lang="en">
         <head>
@@ -60,7 +62,10 @@ def html_head(title):
         <h1>{1}</h1>
         <ul>
         """
-    ).format(app_name, title, html_style()).strip("\n")
+        )
+        .format(app_name, title, html_style())
+        .strip("\n")
+    )
 
 
 def html_tail():
@@ -79,8 +84,7 @@ def html_tail():
 def htm_txt(text: str) -> str:
     s = text.replace("&", "&amp;")
     s = s.replace("<", "&lt;")
-    s = s.replace(">", "&gt;")
-    return s
+    return s.replace(">", "&gt;")
 
 
 def htm_url(url: str) -> str:
@@ -111,10 +115,10 @@ def write_history_csv(args, con):
 
     rows = cur.fetchall()
 
-    file_name = outpath / f"{args.output_prefix}-history.csv"
+    outfile = outpath / f"{args.output_prefix}-history.csv"
 
-    print(f"Writing '{file_name}'")
-    with open(file_name, "w") as f:
+    print(f"Writing '{outfile}'")
+    with outfile.open("w") as f:
         f.write("url,title,host,visit_count,frecency,visit_date\n")
         for row in rows:
             url = limited(row[0])
@@ -145,29 +149,29 @@ def write_history_csv(args, con):
             )
 
 
-def get_parent_path(con, id):
+def get_parent_path(con, bookmark_parent_id):
     cur = con.cursor()
 
     depth = 0
-    parent_id = id
+    parent_id = bookmark_parent_id
     parent_path = "/"
-    while 0 < parent_id:
+    while parent_id > 0:
         #  It appears that the root always has id=0. If that is not the case
         #  this max-depth check (99 seems like a good arbitrary value) will
         #  prevent an infinate loop.
         depth += 1
-        assert depth < 99
+        assert depth < 99  # noqa: S101, PLR2004
 
-        sql = (
+        sql = (  # noqa: S608
             "SELECT parent, title FROM moz_bookmarks WHERE id = {0}"
         ).format(parent_id)
 
         cur.execute(sql)
         rows = cur.fetchall()
-        assert len(rows) == 1
+        assert len(rows) == 1  # noqa: S101
 
         parent_id = int(rows[0][0])
-        if 0 < parent_id:
+        if parent_id > 0:
             title = str(rows[0][1])
             parent_path = f"/{title}{parent_path}"
 
@@ -175,8 +179,6 @@ def get_parent_path(con, id):
 
 
 def get_bookmarks(con):
-
-    global bookmarks
     if bookmarks:
         return bookmarks
 
@@ -209,9 +211,7 @@ def get_bookmarks(con):
         if title is None:
             title = f"({url})"
 
-        bookmarks.append(
-            Bookmark(title, url, get_parent_path(con, parent_id))
-        )
+        bookmarks.append(Bookmark(title, url, get_parent_path(con, parent_id)))
 
     bookmarks.sort(key=lambda item: item.parent_path + item.title)
 
@@ -219,29 +219,24 @@ def get_bookmarks(con):
 
 
 def write_bookmarks_csv(args, con):
-    file_name = outpath / f"{args.output_prefix}-bookmarks.csv"
+    outfile = outpath / f"{args.output_prefix}-bookmarks.csv"
 
     bmks = get_bookmarks(con)
 
-    print(f"Writing '{file_name}'")
-    with open(file_name, "w") as f:
+    print(f"Writing '{outfile}'")
+    with outfile.open("w") as f:
         f.write("parent_path,title,url\n")
         for bmk in bmks:
-            f.write(
-                '"{0}","{1}","{2}"\n'.format(
-                    bmk.parent_path, bmk.title, bmk.url
-                )
-            )
+            f.write('"{0}","{1}","{2}"\n'.format(bmk.parent_path, bmk.title, bmk.url))
 
 
 def write_bookmarks_html(args, con):
-    file_name = outpath / f"{args.output_prefix}-bookmarks.html"
+    outfile = outpath / f"{args.output_prefix}-bookmarks.html"
 
     bmks = get_bookmarks(con)
 
-    print(f"Writing '{file_name}'")
-    with open(file_name, "w") as f:
-
+    print(f"Writing '{outfile}'")
+    with outfile.open("w") as f:
         f.write(html_head("Bookmarks"))
 
         for bmk in bmks:
@@ -256,23 +251,18 @@ def write_bookmarks_html(args, con):
                         {2}</a></p>
                     </li>
                     """
-            ).format(
-                htm_txt(bmk.parent_path),
-                htm_txt(title),
-                htm_url(bmk.url)
-            )
+            ).format(htm_txt(bmk.parent_path), htm_txt(title), htm_url(bmk.url))
             f.write(indent(s, " " * 8))
         f.write(html_tail())
 
 
 def write_github_links_html(args, con):
-
-    file_name = outpath / f"{args.output_prefix}-github-links.html"
+    outfile = outpath / f"{args.output_prefix}-github-links.html"
 
     bmks = get_bookmarks(con)
 
-    print(f"Writing '{file_name}'")
-    with open(file_name, "w") as f:
+    print(f"Writing '{outfile}'")
+    with outfile.open("w") as f:
         f.write(html_head("Bookmarks/GitHub"))
         for bmk in bmks:
             if bmk.url.startswith("https://github.com/"):
@@ -287,17 +277,12 @@ def write_github_links_html(args, con):
                             {2}</a></p>
                         </li>
                         """
-                ).format(
-                    htm_txt(bmk.parent_path),
-                    htm_txt(title),
-                    htm_url(bmk.url)
-                )
+                ).format(htm_txt(bmk.parent_path), htm_txt(title), htm_url(bmk.url))
                 f.write(indent(s, " " * 8))
         f.write(html_tail())
 
 
 def write_frecency_csv(args, con):
-
     sql = dedent(
         """
         SELECT DISTINCT
@@ -314,10 +299,10 @@ def write_frecency_csv(args, con):
 
     rows = cur.fetchall()
 
-    file_name = outpath / f"{args.output_prefix}-frecency.csv"
+    outfile = outpath / f"{args.output_prefix}-frecency.csv"
 
-    print(f"Writing '{file_name}'")
-    with open(file_name, "w") as f:
+    print(f"Writing '{outfile}'")
+    with outfile.open("w") as f:
         f.write("url,title,frecency\n")
         for row in rows:
             f.write(
@@ -328,7 +313,6 @@ def write_frecency_csv(args, con):
 
 
 def write_frecency_html(args, con):
-
     sql = dedent(
         """
         SELECT DISTINCT
@@ -344,10 +328,10 @@ def write_frecency_html(args, con):
 
     rows = cur.fetchall()
 
-    file_name = outpath / f"{args.output_prefix}-recent-links.html"
+    outfile = outpath / f"{args.output_prefix}-recent-links.html"
 
-    print(f"Writing '{file_name}'")
-    with open(file_name, "w") as f:
+    print(f"Writing '{outfile}'")
+    with outfile.open("w") as f:
         f.write(html_head("Top 100 Recent/Frequent  Links"))
         for row in rows:
             url = row[0]
@@ -368,7 +352,7 @@ def write_frecency_html(args, con):
         f.write(html_tail())
 
 
-def get_args(argv):
+def get_args(arglist=None):
     ap = argparse.ArgumentParser(
         description="Extracts information from a Firefox places.sqlite file."
     )
@@ -396,12 +380,11 @@ def get_args(argv):
         help="Include an output file listing bookmarks for github URLs.",
     )
 
-    return ap.parse_args(argv[1:])
+    return ap.parse_args(arglist)
 
 
-def main(argv):
-
-    args = get_args(argv)
+def main(arglist=None):
+    args = get_args(arglist)
 
     db_path = Path(args.places_file)
 
@@ -427,4 +410,4 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    main()
